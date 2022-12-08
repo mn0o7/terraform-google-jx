@@ -37,7 +37,7 @@ resource "google_kms_crypto_key" "vault_crypto_key" {
 
   provider        = google
   name            = "crypto-key-${var.cluster_name}-${var.cluster_id}"
-  key_ring        = google_kms_key_ring.vault_keyring[0].self_link
+  key_ring        = google_kms_key_ring.vault_keyring[0].id
   rotation_period = "100000s"
   depends_on      = [google_project_service.cloudkms_api]
 }
@@ -63,31 +63,31 @@ resource "google_storage_bucket" "vault_bucket" {
 // https://www.terraform.io/docs/providers/google/r/google_project_iam.html#google_project_iam_member
 // ----------------------------------------------------------------------------
 resource "google_service_account" "vault_sa" {
-  count        = var.external_vault && ! var.jx2 ? 0 : 1
+  count        = var.external_vault && !var.jx2 ? 0 : 1
   provider     = google
   account_id   = local.sa_name
   display_name = substr("Vault service account for cluster ${var.cluster_name}", 0, 100)
 }
 
 resource "google_project_iam_member" "vault_sa_storage_object_admin_binding" {
-  count = var.external_vault ? 0 : 1
-
+  count    = var.external_vault ? 0 : 1
+  project  = var.gcp_project
   provider = google
   role     = "roles/storage.objectAdmin"
   member   = "serviceAccount:${local.vault_sa_email}"
 }
 
 resource "google_project_iam_member" "vault_sa_cloudkms_admin_binding" {
-  count = var.external_vault ? 0 : 1
-
+  count    = var.external_vault ? 0 : 1
+  project  = var.gcp_project
   provider = google
   role     = "roles/cloudkms.admin"
   member   = "serviceAccount:${local.vault_sa_email}"
 }
 
 resource "google_project_iam_member" "vault_sa_cloudkms_crypto_binding" {
-  count = var.external_vault ? 0 : 1
-
+  count    = var.external_vault ? 0 : 1
+  project  = var.gcp_project
   provider = google
   role     = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member   = "serviceAccount:${local.vault_sa_email}"

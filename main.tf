@@ -5,6 +5,15 @@
 // ----------------------------------------------------------------------------
 terraform {
   required_version = ">= 0.12.0, < 2.0"
+  required_providers {
+    google      = ">= 4.26.0"
+    google-beta = ">= 4.26.0"
+    kubernetes  = ">=2.11.0"
+    helm        = ">=2.6.0"
+    random      = ">= 3.3.2"
+    local       = ">= 2.2.3"
+    null        = ">= 2.1.0"
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -12,45 +21,23 @@ terraform {
 // ----------------------------------------------------------------------------
 provider "google" {
   project = var.gcp_project
-  version = ">= 3.46.0, < 4.0.0"
 }
 
 provider "google-beta" {
   project = var.gcp_project
-  version = ">= 3.46.0, < 4.0.0"
-}
-
-provider "random" {
-  version = ">= 2.2.0"
-}
-
-provider "local" {
-  version = ">= 1.2.0"
-}
-
-provider "null" {
-  version = ">= 2.1.0"
-}
-
-provider "template" {
-  version = ">= 2.1.0"
 }
 
 data "google_client_config" "default" {
 }
 
 provider "kubernetes" {
-  version          = "~>1.11.0"
-  load_config_file = false
-
   host                   = "https://${module.cluster.cluster_endpoint}"
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(module.cluster.cluster_ca_certificate)
 }
 
 provider "helm" {
-  version = "~>1.3.0"
-  debug   = true
+  debug = true
 
   kubernetes {
     host                   = "https://${module.cluster.cluster_endpoint}"
@@ -58,8 +45,6 @@ provider "helm" {
     client_certificate     = base64decode(module.cluster.cluster_client_certificate)
     client_key             = base64decode(module.cluster.client_client_key)
     cluster_ca_certificate = base64decode(module.cluster.cluster_ca_certificate)
-
-    load_config_file = false
   }
 }
 
@@ -150,20 +135,27 @@ resource "google_project_service" "container_api" {
 module "cluster" {
   source = "./modules/cluster"
 
-  gcp_project         = var.gcp_project
-  cluster_name        = local.cluster_name
-  cluster_location    = local.location
-  cluster_network     = var.cluster_network
-  cluster_subnetwork  = var.cluster_subnetwork
-  cluster_id          = random_id.random.hex
-  bucket_location     = var.bucket_location
-  jenkins_x_namespace = var.jenkins_x_namespace
-  force_destroy       = var.force_destroy
+  gcp_project                = var.gcp_project
+  cluster_name               = local.cluster_name
+  cluster_location           = local.location
+  cluster_network            = var.cluster_network
+  cluster_subnetwork         = var.cluster_subnetwork
+  cluster_id                 = random_id.random.hex
+  enable_private_nodes       = var.enable_private_nodes
+  master_ipv4_cidr_block     = var.master_ipv4_cidr_block
+  master_authorized_networks = var.master_authorized_networks
+  ip_range_pods              = var.ip_range_pods
+  ip_range_services          = var.ip_range_services
+  max_pods_per_node          = var.max_pods_per_node
+  bucket_location            = var.bucket_location
+  jenkins_x_namespace        = var.jenkins_x_namespace
+  force_destroy              = var.force_destroy
 
   node_machine_type = var.node_machine_type
   node_disk_size    = var.node_disk_size
   node_disk_type    = var.node_disk_type
   node_preemptible  = var.node_preemptible
+  node_spot         = var.node_spot
   min_node_count    = var.min_node_count
   max_node_count    = var.max_node_count
   release_channel   = var.release_channel
@@ -173,9 +165,9 @@ module "cluster" {
   jx2          = var.jx2
   content      = local.content
 
-  jx_git_url      = var.jx_git_url
-  jx_bot_username = var.jx_bot_username
-  jx_bot_token    = var.jx_bot_token
+  jx_git_url              = var.jx_git_url
+  jx_bot_username         = var.jx_bot_username
+  jx_bot_token            = var.jx_bot_token
   jx_git_operator_version = var.jx_git_operator_version
 
   kuberhealthy = var.kuberhealthy
@@ -186,7 +178,7 @@ module "cluster" {
 // See https://github.com/banzaicloud/bank-vaults
 // ----------------------------------------------------------------------------
 module "vault" {
-  count  = ! var.gsm ? 1 : 0
+  count  = !var.gsm ? 1 : 0
   source = "./modules/vault"
 
   gcp_project         = var.gcp_project
@@ -204,7 +196,7 @@ module "vault" {
 // See https://cloud.google.com/secret-manager
 // ----------------------------------------------------------------------------
 module "gsm" {
-  count  = var.gsm && ! var.jx2 ? 1 : 0
+  count  = var.gsm && !var.jx2 ? 1 : 0
   source = "./modules/gsm"
 
   gcp_project  = var.gcp_project
@@ -257,7 +249,7 @@ module "dns" {
 module "jx-boot" {
   source        = "./modules/jx-boot"
   depends_on    = [module.cluster]
-  install_vault = ! var.gsm ? true : false
+  install_vault = !var.gsm ? true : false
 }
 
 // ----------------------------------------------------------------------------
@@ -285,7 +277,7 @@ locals {
     vault_name      = length(module.vault) > 0 ? module.vault[0].vault_name : ""
     vault_sa        = length(module.vault) > 0 ? module.vault[0].vault_sa : ""
     vault_url       = var.vault_url
-    vault_installed = ! var.gsm ? true : false
+    vault_installed = !var.gsm ? true : false
     // Velero
     enable_backup    = var.enable_backup
     velero_sa        = module.backup.velero_sa
